@@ -1,43 +1,72 @@
 import streamlit as st
-from email_generator import generate_email
-from history import save_email, get_history
+from auth import login, is_logged_in
+from email_engine import generate_email
+from db import save_email, get_user_emails
+from pdf_export import create_pdf
 
-st.set_page_config(page_title="AI Email Generator", page_icon="📧", layout="wide")
+st.set_page_config(page_title="AI Email Enterprise", layout="wide")
 
-st.title("📧 AI Email Generator")
+# LOGIN
+login()
 
-# Sidebar history
-st.sidebar.header("📜 History")
-history = get_history()
+if not is_logged_in():
+    st.warning("Please login to continue")
+    st.stop()
 
-if history:
-    for item in history[:10]:
-        st.sidebar.write(f"📌 {item[1]}")
-else:
-    st.sidebar.write("No history yet")
+user = st.session_state["user"]
 
-# Input UI
+st.title("📧 AI Email Enterprise System")
+
+# SIDEBAR HISTORY
+st.sidebar.title("📜 Your Emails")
+emails = get_user_emails(user)
+
+for e in emails[:10]:
+    st.sidebar.write(f"📌 {e[2]}")
+
+# INPUTS
 email_type = st.selectbox(
-    "Select Email Type",
+    "Email Type",
     ["Leave Request", "Job Application", "Complaint", "Follow-up"]
 )
 
-user_input = st.text_area("Enter details (optional)")
+tone = st.selectbox(
+    "Tone",
+    ["Formal", "Polite", "Urgent", "Friendly"]
+)
 
-# Generate button
+user_input = st.text_area("Enter details")
+
+# SESSION STORAGE
+if "email" not in st.session_state:
+    st.session_state.email = ""
+
+# GENERATE
 if st.button("🚀 Generate Email"):
 
-    if not user_input:
-        user_input = "No details provided"
+    email = generate_email(email_type, tone, user_input)
+    st.session_state.email = email
 
-    with st.spinner("Generating email..."):
-        result = generate_email(email_type, user_input)
+    st.success("Generated Successfully")
 
-    st.success("Email Generated!")
+    st.text_area("Output", email, height=300)
 
-    st.subheader("📧 Output")
-    st.text_area("", result, height=300)
+    save_email(user, email_type, email)
 
-    st.download_button("📥 Download Email", result)
+# DOWNLOADS
+if st.session_state.email:
 
-    save_email(email_type, result)
+    st.download_button(
+        "📥 Download TXT",
+        st.session_state.email,
+        file_name="email.txt"
+    )
+
+    pdf_file = create_pdf(st.session_state.email)
+
+    with open(pdf_file, "rb") as f:
+        st.download_button(
+            "📄 Download PDF",
+            f,
+            file_name="email.pdf"
+        )
